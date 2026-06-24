@@ -1,7 +1,10 @@
 import {
     ActionRowBuilder,
-    CommandInteraction,
+    ButtonBuilder,
+    ButtonInteraction,
+    ButtonStyle,
     Colors,
+    CommandInteraction,
     EmbedBuilder,
     LabelBuilder,
     MessageFlags,
@@ -10,11 +13,10 @@ import {
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder,
     TextInputBuilder,
-    TextInputStyle, ButtonBuilder,
-    ButtonStyle, ButtonInteraction
+    TextInputStyle
 } from "discord.js";
 import {getClosestCircleEmoji, getLinearUser} from "../util";
-import {Linear, LinearStates, LinearTeam} from "../clients";
+import {Linear, LinearStates} from "../clients";
 
 export async function execute(interaction: CommandInteraction) {
     const labels = (await Linear.issueLabels({ first: 25 })).nodes;
@@ -94,7 +96,7 @@ export const modals = {
 
         const creator = await Linear.user(await getLinearUser(interaction.user.id));
         const issue = await Linear.createIssue({
-            teamId: LinearTeam, // Voidwatch team UUID
+            teamId: process.env.LINEAR_TEAM,
             createAsUser: creator.name,
             projectId,
             labelIds,
@@ -107,13 +109,9 @@ export const modals = {
             const labels = await issueData.labels();
             await interaction.reply({
                 embeds: [new EmbedBuilder()
-                    .setTitle(`${issueData.identifier} - ${issueData.title}`)
+                    .setTitle(`[${issueData.identifier}] ${issueData.title}`)
                     .setURL(issueData.url)
                     .setDescription(description)
-                    // .addFields({
-                    //     name: 'Labels',
-                    //     value:
-                    // })
                     .setColor(Colors.Green)
                     .setFooter({text: `Labels: ${labels.nodes.map(l=>l.name).join(' ⋅ ')}\nCreated by ${creator.name}`, iconURL: creator.avatarUrl})],
                 components: [new ActionRowBuilder<ButtonBuilder>()

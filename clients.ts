@@ -1,4 +1,7 @@
 import {LinearClient} from "@linear/sdk";
+import {Octokit} from "octokit";
+import { createAppAuth } from "@octokit/auth-app"
+import {getClosestCircleEmoji} from "./util";
 
 export const Linear = new LinearClient({accessToken: process.env.LINEAR_TOKEN});
 export const LinearStates = {
@@ -10,5 +13,13 @@ export const LinearStates = {
     'Todo': '5f01fbee-f353-4dd9-9a81-6caae4df336e',
     'Backlog': '3ea0356e-0f46-4fbe-82c5-5d57a4fc0aee',
     'Duplicate': '088670fe-3f12-4495-9ed2-8530ece1bc6c'
-}
-export const LinearTeam = '9b8d24a3-ac63-443c-9b0a-8c5c504f78c6'
+};
+
+export const GitHub = new Octokit({
+    authStrategy: createAppAuth,
+    auth: {
+        appId: process.env.GITHUB_APP_ID,
+        privateKey: process.env.GITHUB_PRIVATE_KEY,
+        installationId: process.env.GITHUB_INSTALLATION_ID,
+    },
+});

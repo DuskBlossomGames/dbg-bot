@@ -1,15 +1,20 @@
 import {
     Client,
-    Routes,
+    Colors,
+    EmbedBuilder,
     Events,
     GatewayIntentBits,
     MessageFlags,
-    REST,
-    SlashCommandBuilder,
     PermissionFlagsBits,
-    EmbedBuilder, Colors, SlashCommandStringOption, Interaction, CacheType, RepliableInteraction, SlashCommandUserOption
+    RepliableInteraction,
+    REST,
+    Routes,
+    SlashCommandBuilder,
+    TextChannel
 } from 'discord.js';
-import {Linear} from "./clients";
+import * as schedule from 'node-schedule';
+import {getActiveIssues, getDiscordUser, getStatusMessage, getUsers, ProjectRoles, updateStatusMessage} from "./util";
+import {Linear, LinearStates} from "./clients";
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 const rest = new REST().setToken(process.env.DISCORD_TOKEN);
@@ -44,7 +49,41 @@ export async function registerCommands() {
         new SlashCommandBuilder()
             .setName('link')
             .setDescription("Link a Discord user to a Linear user and apply roles.")
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+        new SlashCommandBuilder()
+            .setName('assign')
+            .setDescription("Assign a Linear issue, create a branch, and open a Discord channel.")
+            .addStringOption(option =>
+                option.setName('issue')
+                    .setDescription('The Linear issue to assign.')
+                    .setRequired(true)
+                    .setAutocomplete(true))
+            .addUserOption(option =>
+                option.setName('owner')
+                    .setDescription('The Discord user who will own this issue.')
+                    .setRequired(true))
+            .addStringOption(option =>
+                option.setName('due_date')
+                    .setDescription('When the issue is due (YYYY-MM-DD).')
+                    .setRequired(true)),
+        new SlashCommandBuilder()
+            .setName('status')
+            .setDescription('Manage issue workflow status.')
+            .addSubcommand(sub =>
+                sub.setName('continue-dev')
+                    .setDescription('Move back to In Development and ping the owner.'))
+            .addSubcommand(sub =>
+                sub.setName('code-review')
+                    .setDescription('Move to Code Review and ping code reviewers.'))
+            .addSubcommand(sub =>
+                sub.setName('qa-review')
+                    .setDescription('Move to QA Ready and ping QA reviewers.'))
+            .addSubcommand(sub =>
+                sub.setName('qa-accept')
+                    .setDescription('Move to Done and ping code reviewers to merge.'))
+            .addSubcommand(sub =>
+                sub.setName('merged')
+                    .setDescription('Archive the issue channel and deregister watchers.')),
     ];
 
     for (const command of commands) {
@@ -118,6 +157,56 @@ export async function registerCommands() {
 // LOGIN
 client.once(Events.ClientReady, async (readyClient) => {
     await registerCommands();
+
+    schedule.scheduleJob({hour: 8, minute: 0, second: 0, tz: "America/Los_Angeles"}, async () => {
+        for (const [issueId, {channel: channelId}] of Object.entries(await getActiveIssues())) {
+            const channel = await readyClient.channels.fetch(channelId);
+            if (!channel?.isSendable()) return;
+
+            await updateStatusMessage(issueId, (await channel.send(await getStatusMessage(issueId))).id);
+        }
+    });
+    schedule.scheduleJob({hour: 19, minute: 0, second: 0, tz: "America/Los_Angeles"}, async () => {
+        for (const [issueId, {channel: channelId}] of Object.entries(await getActiveIssues())) {
+            const channel = await readyClient.channels.fetch(channelId);
+            if (!channel?.isSendable()) return;
+
+            const issue = await Linear.issue(issueId);
+            
+            let owners: string[];
+            const state = await issue.state;
+            const stateId = state?.id;
+
+            if (stateId === LinearStates['Code Review'] || stateId === LinearStates['Done']) {
+                owners = await getUsers(ProjectRoles.CodeReviewer);
+            } else if (stateId === LinearStates['QA Ready']) {
+                owners = await getUsers(ProjectRoles.QAReviewer);
+            } else {
+                owners = [await getDiscordUser((await issue.assignee).id)];
+            }
+            owners = [...new Set(owners)];
+
+            const messages = await channel.messages.fetch({limit: 100});
+            const startOfDayPST = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Los_Angeles'}));
+            startOfDayPST.setHours(0, 0, 0, 0);
+
+            if (messages.some(msg => owners.includes(msg.author.id) &&
+                new Date(new Date(msg.createdTimestamp)
+                    .toLocaleString('en-US', {timeZone: 'America/Los_Angeles'})) >= startOfDayPST)) continue;
+
+            const ownerMentions = owners.map(user => `<@${user}>`).join(' ');
+            const embed = new EmbedBuilder()
+                .setTitle("📋 Daily Status Update Reminder")
+                .setDescription(`Please send a status update if nothing else has happened today.`)
+                .setColor(Colors.Red);
+
+            await channel.send({
+                content: ownerMentions,
+                embeds: [embed]
+            });
+
+        }
+    })
 });
 
 client.login(process.env.DISCORD_TOKEN);
