@@ -38,8 +38,8 @@ export async function execute(interaction: CommandInteraction) {
                     .setDescription("Select any roles the user should have in the project.")
                     .setStringSelectMenuComponent(new StringSelectMenuBuilder()
                         .setCustomId("roles")
-                        .setRequired(true)
-                        .setMinValues(1)
+                        .setRequired(false)
+                        .setMinValues(0)
                         .setMaxValues(Object.values(ProjectRoles).length)
                         .setOptions(Object.keys(ProjectRoles).map(e=>
                             new StringSelectMenuOptionBuilder()
