@@ -1,0 +1,5 @@
+.idea/
+node_modules/
+bun.lock
+.env
+usermap.json
