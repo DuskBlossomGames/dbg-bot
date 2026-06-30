@@ -130,7 +130,7 @@ export async function getOwners(issue: Issue, state: WorkflowState) {
     return owners;
 }
 
-export async function getStatusMessage(issueId: string) {
+export async function getStatusMessage(issueId: string, assigneeId?: string) {
     const issue = await Linear.issue(issueId);
     const state = await issue.state;
     const stateName = state?.name || 'Unknown';
@@ -146,8 +146,8 @@ export async function getStatusMessage(issueId: string) {
         .addFields(
             {name: 'Status', value: `${getClosestCircleEmoji(state?.color || '#5E6AD2')} ${stateName}`, inline: true},
             {name: 'Due Date', value: issue.dueDate || 'Not set', inline: true},
-            {name: 'Owner', value: `<@${await getDiscordUser((await issue.assignee).id)}>`},
-            {name: 'Handler', value: owners.map(user => `<@${user}>`).join(' ')}
+            {name: 'Owner', value: `<@${await getDiscordUser(assigneeId ?? (await issue.assignee).id)}>`, inline: true},
+            {name: 'Handler', value: owners.map(user => `<@${user}>`).join(' '), inline: true}
         );
 
     const linkButtons: ButtonBuilder[] = [

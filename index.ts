@@ -168,6 +168,7 @@ client.once(Events.ClientReady, async (readyClient) => {
 
     schedule.scheduleJob('* * * * *', async () => {
         for (const [issueId, {channel: channelId, lastStatus}] of Object.entries(await getActiveIssues())) {
+            if (!lastStatus) continue;
             const channel = await readyClient.channels.fetch(channelId);
             if (!channel?.isSendable()) return;
 

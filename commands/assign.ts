@@ -137,7 +137,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
     await updateStatusMessage(issueId, (await channel.send({
         content: pingIds.map(id => `<@${id}>`).join(' '),
-        ...(await getStatusMessage(issueId)),
+        ...(await getStatusMessage(issueId, ownerLinearId)),
     })).id);
 
     await interaction.editReply({
