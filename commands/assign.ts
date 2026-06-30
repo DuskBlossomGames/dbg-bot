@@ -17,11 +17,23 @@ import {
     registerChannel,
     updateStatusMessage
 } from "../util";
-import {Issue} from "@linear/sdk";
+import {Issue, IssueConnection} from "@linear/sdk";
+
+export async function allIssues() {
+    let issues: Issue[] = [];
+
+    let res: IssueConnection;
+    do {
+        res = await (res?.fetchNext() ?? Linear.issues());
+        issues.push(...res.nodes);
+    } while (res.pageInfo.hasNextPage)
+
+    return issues;
+}
 
 export async function autocomplete(interaction: AutocompleteInteraction) {
     const focused = interaction.options.getFocused().toLowerCase();
-    const results = (await Linear.issues()).nodes.filter(n=>
+    const results = (await allIssues()).filter(n=>
         n.title.toLowerCase().includes(focused) || n.identifier.toLowerCase().includes(focused))
         .sort();
     await interaction.respond(

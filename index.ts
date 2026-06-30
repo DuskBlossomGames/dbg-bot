@@ -13,7 +13,15 @@ import {
     TextChannel
 } from 'discord.js';
 import * as schedule from 'node-schedule';
-import {getActiveIssues, getDiscordUser, getStatusMessage, getUsers, ProjectRoles, updateStatusMessage} from "./util";
+import {
+    getActiveIssues,
+    getOwners,
+    getDiscordUser,
+    getStatusMessage,
+    getUsers,
+    ProjectRoles,
+    updateStatusMessage
+} from "./util";
 import {Linear, LinearStates} from "./clients";
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
@@ -158,10 +166,20 @@ export async function registerCommands() {
 client.once(Events.ClientReady, async (readyClient) => {
     await registerCommands();
 
+    schedule.scheduleJob('* * * * *', async () => {
+        for (const [issueId, {channel: channelId, lastStatus}] of Object.entries(await getActiveIssues())) {
+            const channel = await readyClient.channels.fetch(channelId);
+            if (!channel?.isSendable()) return;
+
+            await channel.messages.edit(lastStatus, await getStatusMessage(issueId));
+        }
+    })
+
     schedule.scheduleJob({hour: 8, minute: 0, second: 0, tz: "America/Los_Angeles"}, async () => {
         for (const [issueId, {channel: channelId}] of Object.entries(await getActiveIssues())) {
             const channel = await readyClient.channels.fetch(channelId);
             if (!channel?.isSendable()) return;
+
 
             await updateStatusMessage(issueId, (await channel.send(await getStatusMessage(issueId))).id);
         }
@@ -172,19 +190,7 @@ client.once(Events.ClientReady, async (readyClient) => {
             if (!channel?.isSendable()) return;
 
             const issue = await Linear.issue(issueId);
-            
-            let owners: string[];
-            const state = await issue.state;
-            const stateId = state?.id;
-
-            if (stateId === LinearStates['Code Review'] || stateId === LinearStates['Done']) {
-                owners = await getUsers(ProjectRoles.CodeReviewer);
-            } else if (stateId === LinearStates['QA Ready']) {
-                owners = await getUsers(ProjectRoles.QAReviewer);
-            } else {
-                owners = [await getDiscordUser((await issue.assignee).id)];
-            }
-            owners = [...new Set(owners)];
+            const owners = await getOwners(issue, await issue.state);
 
             const messages = await channel.messages.fetch({limit: 100});
             const startOfDayPST = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Los_Angeles'}));

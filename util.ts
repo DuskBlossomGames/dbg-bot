@@ -2,7 +2,7 @@ import {Snowflake, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, C
 import {readFile, writeFile} from "node:fs/promises";
 import {writeFileSync, existsSync} from 'node:fs'
 import {Linear, LinearStates} from "./clients";
-import {Issue} from "@linear/sdk";
+import {Issue, WorkflowState} from "@linear/sdk";
 
 export enum ProjectRoles { CodeReviewer = "Code Reviewer", QAReviewer = "QA Reviewer" }
 export type UserData = {linear: string, roles: ProjectRoles[]}
@@ -114,6 +114,22 @@ export function branchName(issue: Issue) {
     return `${issue.identifier}-${slug}`;
 }
 
+export async function getOwners(issue: Issue, state: WorkflowState) {
+    let owners: string[];
+
+    const stateId = state?.id;
+    if (stateId === LinearStates['Code Review'] || stateId === LinearStates['Done']) {
+        owners = await getUsers(ProjectRoles.CodeReviewer);
+    } else if (stateId === LinearStates['QA Ready']) {
+        owners = await getUsers(ProjectRoles.QAReviewer);
+    } else {
+        owners = [await getDiscordUser((await issue.assignee).id)];
+    }
+    owners = [...new Set(owners)];
+
+    return owners;
+}
+
 export async function getStatusMessage(issueId: string) {
     const issue = await Linear.issue(issueId);
     const state = await issue.state;
@@ -121,6 +137,7 @@ export async function getStatusMessage(issueId: string) {
 
     const githubUrl = `https://github.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/tree/${branchName(issue)}`;
 
+    const owners = await getOwners(issue, state);
     const embed = new EmbedBuilder()
         .setTitle(`[${issue.identifier}] ${issue.title}`)
         .setURL(issue.url)
@@ -129,7 +146,8 @@ export async function getStatusMessage(issueId: string) {
         .addFields(
             {name: 'Status', value: `${getClosestCircleEmoji(state?.color || '#5E6AD2')} ${stateName}`, inline: true},
             {name: 'Due Date', value: issue.dueDate || 'Not set', inline: true},
-            {name: 'Owner', value: `<@${await getDiscordUser((await issue.assignee).id)}>`}
+            {name: 'Owner', value: `<@${await getDiscordUser((await issue.assignee).id)}>`},
+            {name: 'Handler', value: owners.map(user => `<@${user}>`).join(' ')}
         );
 
     const linkButtons: ButtonBuilder[] = [
