@@ -177,10 +177,12 @@ client.once(Events.ClientReady, async (readyClient) => {
     })
 
     schedule.scheduleJob({hour: 8, minute: 0, second: 0, tz: "America/Los_Angeles"}, async () => {
-        for (const [issueId, {channel: channelId}] of Object.entries(await getActiveIssues())) {
+        for (const [issueId, {channel: channelId, lastStatus}] of Object.entries(await getActiveIssues())) {
             const channel = await readyClient.channels.fetch(channelId);
             if (!channel?.isSendable()) return;
 
+            const messages = await channel.messages.fetch({limit: 20});
+            if (messages.some(msg=>msg.id === lastStatus)) continue;
 
             await updateStatusMessage(issueId, (await channel.send(await getStatusMessage(issueId))).id);
         }
