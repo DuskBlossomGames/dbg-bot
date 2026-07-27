@@ -136,6 +136,7 @@ export async function getStatusMessage(issueId: string, assigneeId?: string) {
     const stateName = state?.name || 'Unknown';
 
     const githubUrl = `https://github.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/tree/${branchName(issue)}`;
+    const compareUrl = `https://github.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/compare/${process.env.GITHUB_BASE_BRANCH}...${branchName(issue)}?expand=1`;
 
     const owners = await getOwners(issue, state);
     const embed = new EmbedBuilder()
@@ -158,7 +159,11 @@ export async function getStatusMessage(issueId: string, assigneeId?: string) {
         new ButtonBuilder()
             .setLabel('GitHub')
             .setStyle(ButtonStyle.Link)
-            .setURL(githubUrl)
+            .setURL(githubUrl),
+        new ButtonBuilder()
+            .setLabel('Compare')
+            .setStyle(ButtonStyle.Link)
+            .setURL(compareUrl)
     ];
 
     const actionButtons: ButtonBuilder[] = [];
