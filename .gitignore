@@ -4,3 +4,4 @@ bun.lock
 .env
 usermap.json
 issuemap.json
+linear_tokens.json

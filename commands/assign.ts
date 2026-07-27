@@ -24,7 +24,7 @@ export async function allIssues() {
 
     let res: IssueConnection;
     do {
-        res = await (res?.fetchNext() ?? Linear.issues());
+        res = await (res?.fetchNext() ?? (await Linear()).issues());
         issues.push(...res.nodes);
     } while (res.pageInfo.hasNextPage)
 
@@ -75,7 +75,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     }
 
     let issue: Issue;
-    try { issue = await Linear.issue(issueId); } catch (error) {}
+    try { issue = await (await Linear()).issue(issueId); } catch (error) {}
     if (!issue) {
         await interaction.reply({
             embeds: [new EmbedBuilder()
@@ -115,7 +115,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
     let update;
     try {
-        update = await Linear.updateIssue(issue.id, {
+        update = await (await Linear()).updateIssue(issue.id, {
             stateId: LinearStates['In Development'],
             assigneeId: ownerLinearId,
             dueDate: dueDateInput,

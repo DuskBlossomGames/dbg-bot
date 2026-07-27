@@ -29,7 +29,7 @@ export async function execute(interaction: CommandInteraction) {
                     .setStringSelectMenuComponent(new StringSelectMenuBuilder()
                         .setCustomId("linear_user")
                         .setRequired(true)
-                        .setOptions((await Linear.users({first: 25})).nodes.map(u=>
+                        .setOptions((await (await Linear()).users({first: 25})).nodes.map(u=>
                             new StringSelectMenuOptionBuilder()
                                 .setLabel(u.name)
                                 .setValue(u.id)))),
@@ -57,7 +57,7 @@ export const modals = {
         
         await registerUser(discord, linear, roles);
 
-        const linearName = (await Linear.user(linear)).name;
+        const linearName = (await (await Linear()).user(linear)).name;
 
         const mention = `<@${discord}>`
         await interaction.reply({

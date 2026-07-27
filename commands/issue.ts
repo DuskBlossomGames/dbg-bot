@@ -19,7 +19,7 @@ import {getClosestCircleEmoji, getLinearUser} from "../util";
 import {Linear, LinearStates} from "../clients";
 
 export async function execute(interaction: CommandInteraction) {
-    const labels = (await Linear.issueLabels({ first: 25 })).nodes;
+    const labels = (await (await Linear()).issueLabels({ first: 25 })).nodes;
     await interaction.showModal(
         new ModalBuilder()
             .setCustomId("create_issue_modal")
@@ -32,7 +32,7 @@ export async function execute(interaction: CommandInteraction) {
                         .setCustomId('project')
                         .setRequired(true)
                         .addOptions(
-                            ...(await Linear.projects({ first: 25 })).nodes
+                            ...(await (await Linear()).projects({ first: 25 })).nodes
                                 .sort((a,b)=>a.name.localeCompare(b.name))
                                 .map((p) =>new StringSelectMenuOptionBuilder()
                                     .setLabel(p.name)
@@ -94,8 +94,8 @@ export const modals = {
             return;
         }
 
-        const creator = await Linear.user(await getLinearUser(interaction.user.id));
-        const issue = await Linear.createIssue({
+        const creator = await (await Linear()).user(await getLinearUser(interaction.user.id));
+        const issue = await (await Linear()).createIssue({
             teamId: process.env.LINEAR_TEAM,
             createAsUser: creator.name,
             projectId,
@@ -136,7 +136,7 @@ export const modals = {
 export const buttons = {
     'create_issue_undo_button\\|.*': async (interaction: ButtonInteraction) => {
         const issueId = interaction.customId.split('|')[1]
-        const response = await Linear.deleteIssue(issueId);
+        const response = await (await Linear()).deleteIssue(issueId);
 
         if (response.success) {
             await interaction.message.delete();

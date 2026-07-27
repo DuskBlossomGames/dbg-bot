@@ -40,7 +40,7 @@ async function requireIssueChannel(interaction: StatusInteraction, issueId?: str
 }
 
 async function requireStates(interaction: StatusInteraction, issue: string, states: (keyof typeof LinearStates)[]) {
-    const state = await (await Linear.issue(issue)).state;
+    const state = await (await (await Linear()).issue(issue)).state;
     if (!states.map(s=>LinearStates[s]).includes(state.id)) {
         await interaction.reply({
             embeds: [new EmbedBuilder()
@@ -58,12 +58,12 @@ async function requireStates(interaction: StatusInteraction, issue: string, stat
 
 async function updateState(interaction: StatusInteraction, issueId: string, stateId: string) {
     let update;
-    try { update = await Linear.updateIssue(issueId, {stateId}); } catch (e) { console.log(e); }
+    try { update = await (await Linear()).updateIssue(issueId, {stateId}); } catch (e) { console.log(e); }
     if (!update.success) {
         await interaction.reply({
             embeds: [new EmbedBuilder()
                 .setTitle("🚨 Linear Update Failed")
-                .setDescription("Could not update the issue status in Linear.")
+                .setDescription("Could not update the issue status in (await Linear()).")
                 .setColor(Colors.DarkRed)],
             flags: MessageFlags.Ephemeral,
         });
@@ -97,7 +97,7 @@ async function continueDev(interaction: StatusInteraction, issueId?: string) {
 
     if (!await requireStates(interaction, id, ['Code Review', 'QA Ready'])) return;
 
-    const issue = await Linear.issue(id);
+    const issue = await (await Linear()).issue(id);
     const assignee = await issue.assignee;
     const ownerId = assignee ? await getDiscordUser(assignee.id) : undefined;
 
@@ -135,7 +135,7 @@ async function qaAccept(interaction: StatusInteraction, issueId?: string) {
 
     if (!await requireStates(interaction, id, ['QA Ready'])) return;
 
-    const issue = await Linear.issue(id);
+    const issue = await (await Linear()).issue(id);
     const reviewers = await getUsers(ProjectRoles.CodeReviewer);
     const branch = branchName(issue);
     const base = process.env.GITHUB_BASE_BRANCH!;

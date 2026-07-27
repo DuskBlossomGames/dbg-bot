@@ -131,7 +131,7 @@ export async function getOwners(issue: Issue, state: WorkflowState) {
 }
 
 export async function getStatusMessage(issueId: string, assigneeId?: string) {
-    const issue = await Linear.issue(issueId);
+    const issue = await (await Linear()).issue(issueId);
     const state = await issue.state;
     const stateName = state?.name || 'Unknown';
 

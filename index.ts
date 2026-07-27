@@ -192,7 +192,7 @@ client.once(Events.ClientReady, async (readyClient) => {
             const channel = await readyClient.channels.fetch(channelId);
             if (!channel?.isSendable()) return;
 
-            const issue = await Linear.issue(issueId);
+            const issue = await (await Linear()).issue(issueId);
             const owners = await getOwners(issue, await issue.state);
 
             const messages = await channel.messages.fetch({limit: 100});
