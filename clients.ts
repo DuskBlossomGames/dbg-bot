@@ -8,45 +8,52 @@ interface TokenStorage {
     refreshToken: string;
     expiresAt: number;
 }
+const DEFAULT_TOKENS: TokenStorage = { refreshToken: process.env.LINEAR_REFRESH_TOKEN!, expiresAt: 0 };
+
 const LINEAR_TOKENS_FILE = "linear_tokens.json";
-if (!existsSync(LINEAR_TOKENS_FILE)) writeFileSync(LINEAR_TOKENS_FILE,
-    JSON.stringify({ refreshToken: process.env.LINEAR_REFRESH_TOKEN!, expiresAt: 0 }));
+if (!existsSync(LINEAR_TOKENS_FILE)) writeFileSync(LINEAR_TOKENS_FILE, JSON.stringify(DEFAULT_TOKENS));
 
 const tokens = async () =>
     JSON.parse(await readFile(LINEAR_TOKENS_FILE, 'utf-8')) as TokenStorage;
 const writeTokens = async (tokens: TokenStorage) =>
     await writeFile(LINEAR_TOKENS_FILE, JSON.stringify(tokens));
 
+async function refreshTokens(defaulted: boolean = false) {
+    const response = await fetch("https://api.linear.app/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+            grant_type: "refresh_token",
+            client_id: process.env.LINEAR_CLIENT_ID!,
+            client_secret: process.env.LINEAR_CLIENT_SECRET!,
+            refresh_token: (await tokens()).refreshToken,
+        }),
+    });
+
+    if (!response.ok) {
+        if (!defaulted) {
+            await writeTokens(DEFAULT_TOKENS);
+            return refreshTokens(true);
+        }
+        throw new Error(`Failed to refresh Linear token: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+
+    await writeTokens({
+        refreshToken: data.refresh_token,
+        expiresAt: Date.now() + data.expires_in * 1000,
+    });
+
+    client = new LinearClient({
+        accessToken: data.access_token,
+    });
+}
+
 let client: LinearClient | null = null;
 export async function Linear(): Promise<LinearClient> {
     const buffer = 5 * 60 * 1000;
-    if (Date.now() + buffer >= (await tokens()).expiresAt || !client) {
-        const response = await fetch("https://api.linear.app/oauth/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-                grant_type: "refresh_token",
-                client_id: process.env.LINEAR_CLIENT_ID!,
-                client_secret: process.env.LINEAR_CLIENT_SECRET!,
-                refresh_token: (await tokens()).refreshToken,
-            }),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to refresh Linear token: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        await writeTokens({
-            refreshToken: data.refresh_token,
-            expiresAt: Date.now() + data.expires_in * 1000,
-        });
-
-        client = new LinearClient({
-            accessToken: data.access_token,
-        });
-    }
+    if (Date.now() + buffer >= (await tokens()).expiresAt || !client) await refreshTokens();
     return client;
 }
 export const LinearStates = {
