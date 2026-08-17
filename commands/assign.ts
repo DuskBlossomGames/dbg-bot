@@ -11,6 +11,7 @@ import {GitHub, Linear, LinearStates} from "../clients";
 import {
     branchName,
     getLinearUser,
+    getStageCategory,
     getStatusMessage,
     getUsers,
     ProjectRoles,
@@ -45,6 +46,14 @@ export async function autocomplete(interaction: AutocompleteInteraction) {
 }
 
 export async function execute(interaction: ChatInputCommandInteraction) {
+    if (!interaction.guild) {
+        await interaction.reply({
+            content: "This command can only be used in a server.",
+            flags: MessageFlags.Ephemeral,
+        });
+        return;
+    }
+
     const issueId = interaction.options.getString('issue', true);
     const owner = interaction.options.getUser('owner', true);
     const dueDateInput = interaction.options.getString('due_date', true).trim();
@@ -130,7 +139,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     const channel = await interaction.guild.channels.create({
         name: channelName,
         type: ChannelType.GuildText,
-        parent: process.env.DISCORD_ISSUE_CATEGORY,
+        parent: (await getStageCategory(interaction.guild, 'In Development')).id,
         topic: `[${issue.identifier}] ${issue.title}`,
     });
     await registerChannel(issueId, channel.id);

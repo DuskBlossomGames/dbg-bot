@@ -8,7 +8,7 @@ import {
 import {Linear, LinearStates} from "../clients";
 import {
     branchName, getDiscordUser, getIssue,
-    getLastStatusMessage, getStatusMessage, getUsers, ProjectRoles, removeIssue
+    getLastStatusMessage, getStatusMessage, getUsers, moveIssueChannelToStage, ProjectRoles, removeIssue
 } from "../util";
 import {Issue} from "@linear/sdk";
 
@@ -56,9 +56,9 @@ async function requireStates(interaction: StatusInteraction, issue: string, stat
     return true;
 }
 
-async function updateState(interaction: StatusInteraction, issueId: string, stateId: string) {
+async function updateState(interaction: StatusInteraction, issueId: string, stage: keyof typeof LinearStates) {
     let update;
-    try { update = await (await Linear()).updateIssue(issueId, {stateId}); } catch (e) { console.log(e); }
+    try { update = await (await Linear()).updateIssue(issueId, {stateId: LinearStates[stage]}); } catch (e) { console.log(e); }
     if (!update.success) {
         await interaction.reply({
             embeds: [new EmbedBuilder()
@@ -72,14 +72,24 @@ async function updateState(interaction: StatusInteraction, issueId: string, stat
     return true;
 }
 
-async function sendTransition(interaction: StatusInteraction, issueId: string, content: string, title: string, description?: string) {
+async function sendTransition(
+    interaction: StatusInteraction,
+    issueId: string,
+    stage: keyof typeof LinearStates,
+    content: string,
+    description?: string,
+    titleStage?: string,
+) {
+    if (!(await updateState(interaction, issueId, stage))) return;
+
     const channel = interaction.channel;
     if (!channel?.isSendable()) return;
 
+    await moveIssueChannelToStage(interaction.guild, interaction.channelId, stage);
     await interaction.reply({
         content: content,
         embeds: [new EmbedBuilder()
-            .setTitle(title)
+            .setTitle(`Moved to ${titleStage ?? stage}`)
             .setDescription(description ?? null)
             .setFooter({text: `Initiated by ${(interaction.member as GuildMember).displayName}`, iconURL: interaction.user.avatarURL()})
             .setColor(Colors.Green)]});
@@ -101,8 +111,7 @@ async function continueDev(interaction: StatusInteraction, issueId?: string) {
     const assignee = await issue.assignee;
     const ownerId = assignee ? await getDiscordUser(assignee.id) : undefined;
 
-    if (!await updateState(interaction, id, LinearStates['In Development'])) return;
-    await sendTransition(interaction, id, mention([ownerId]), "Moved to In Development");
+    await sendTransition(interaction, id, "In Development", mention([ownerId]));
 }
 
 async function codeReview(interaction: StatusInteraction, issueId?: string) {
@@ -113,8 +122,7 @@ async function codeReview(interaction: StatusInteraction, issueId?: string) {
 
     const reviewers = await getUsers(ProjectRoles.CodeReviewer);
 
-    if (!await updateState(interaction, id, LinearStates['Code Review'])) return;
-    await sendTransition(interaction, id, mention(reviewers), "Moved to Code Review");
+    await sendTransition(interaction, id, "Code Review", mention(reviewers));
 }
 
 async function qaReview(interaction: StatusInteraction, issueId?: string) {
@@ -125,8 +133,7 @@ async function qaReview(interaction: StatusInteraction, issueId?: string) {
 
     const reviewers = await getUsers(ProjectRoles.QAReviewer);
 
-    if (!await updateState(interaction, id, LinearStates['QA Ready'])) return;
-    await sendTransition(interaction, id, mention(reviewers), "Moved to QA Ready");
+    await sendTransition(interaction, id, 'QA Ready', mention(reviewers));
 }
 
 async function qaAccept(interaction: StatusInteraction, issueId?: string) {
@@ -141,13 +148,13 @@ async function qaAccept(interaction: StatusInteraction, issueId?: string) {
     const base = process.env.GITHUB_BASE_BRANCH!;
     const mergeUrl = `https://github.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/compare/${base}...${branch}?expand=1`;
 
-    if (!await updateState(interaction, id, LinearStates['Done'])) return;
     await sendTransition(
         interaction,
         id,
+        'Done',
         `${mention(reviewers)}`,
-        "Moved to Done",
-        `Please merge \`${branch}\` into \`${base}\`: [Compare View](${mergeUrl})`
+        `Please merge \`${branch}\` into \`${base}\`: [Compare View](${mergeUrl})`,
+        "Merge Ready"
     );
 }
 
@@ -157,13 +164,13 @@ async function merged(interaction: StatusInteraction, issueId?: string) {
 
     if (!await requireStates(interaction, id, ['Done'])) return;
 
+    await moveIssueChannelToStage(interaction.guild, interaction.channelId, 'Done');
     await removeIssue(id);
-    await interaction.channel.edit({parent: process.env.DISCORD_ARCHIVE_CATEGORY})
 
     await interaction.reply({
         embeds: [new EmbedBuilder()
             .setTitle("Issue Closed")
-            .setDescription("Channel archived and issue deregistered from watchers.")
+                .setDescription("Issue moved to Done and deregistered from watchers.")
             .setColor(Colors.Green)]});
 }
 

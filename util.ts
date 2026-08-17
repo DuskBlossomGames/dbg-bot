@@ -1,4 +1,13 @@
-import {Snowflake, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, Colors} from "discord.js";
+import {
+    Snowflake,
+    EmbedBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ActionRowBuilder,
+    Colors,
+    Guild,
+    ChannelType
+} from "discord.js";
 import {readFile, writeFile} from "node:fs/promises";
 import {writeFileSync, existsSync} from 'node:fs'
 import {Linear, LinearStates} from "./clients";
@@ -67,6 +76,27 @@ export async function getActiveIssues() {
     return JSON.parse(await readFile(ISSUE_MAP_FILE, 'utf-8')) as IssueMap;
 }
 
+export async function getStageCategory(guild: Guild, state: string) {
+    await guild.channels.fetch();
+    const existing = guild.channels.cache.find(channel =>
+        channel.type === ChannelType.GuildCategory && channel.name === state);
+    if (existing) return existing;
+
+    return guild.channels.create({
+        name: state,
+        type: ChannelType.GuildCategory,
+    });
+}
+
+export async function moveIssueChannelToStage(guild: Guild, channelId: Snowflake, state: string) {
+    const [channel, category] = await Promise.all([
+        guild.channels.fetch(channelId),
+        getStageCategory(guild, state),
+    ]);
+    if (!channel || channel.isThread() || channel.parentId === category.id) return;
+    await channel.setParent(category.id);
+}
+
 export function getClosestCircleEmoji(inputHex: number|string) {
     let hex = typeof inputHex === 'number' ? inputHex.toString(16) : inputHex;
     hex = hex.replace('#', '').padStart(6, '0');
@@ -125,9 +155,8 @@ export async function getOwners(issue: Issue, state: WorkflowState) {
     } else {
         owners = [await getDiscordUser((await issue.assignee).id)];
     }
-    owners = [...new Set(owners)];
 
-    return owners;
+    return [...new Set(owners)];
 }
 
 export async function getStatusMessage(issueId: string, assigneeId?: string) {

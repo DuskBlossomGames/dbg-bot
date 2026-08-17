@@ -8,18 +8,15 @@ import {
     PermissionFlagsBits,
     RepliableInteraction,
     REST,
-    Routes,
+    Routes, SendableChannels,
     SlashCommandBuilder,
-    TextChannel
 } from 'discord.js';
 import * as schedule from 'node-schedule';
 import {
     getActiveIssues,
     getOwners,
-    getDiscordUser,
     getStatusMessage,
-    getUsers,
-    ProjectRoles,
+    moveIssueChannelToStage,
     updateStatusMessage
 } from "./util";
 import {Linear, LinearStates} from "./clients";
@@ -88,10 +85,10 @@ export async function registerCommands() {
                     .setDescription('Move to QA Ready and ping QA reviewers.'))
             .addSubcommand(sub =>
                 sub.setName('qa-accept')
-                    .setDescription('Move to Done and ping code reviewers to merge.'))
+                    .setDescription('Move to Merge Ready and ping code reviewers to merge.'))
             .addSubcommand(sub =>
                 sub.setName('merged')
-                    .setDescription('Archive the issue channel and deregister watchers.')),
+                    .setDescription('Move to Done and deregister watchers.')),
     ];
 
     for (const command of commands) {
@@ -162,16 +159,54 @@ export async function registerCommands() {
 
 }
 
+async function hasOwnerMessageSince(channel: SendableChannels, ownerIds: string[], cutoff: number) {
+    let before = undefined;
+    while (true) {
+        const messages = await channel.messages.fetch({limit: 100, before});
+        if (messages.some(message =>
+            ownerIds.includes(message.author.id) && message.createdTimestamp >= cutoff)) return true;
+
+        if (messages.size < 100) return false;
+        const oldest = messages.reduce((current, message) =>
+            message.createdTimestamp < current.createdTimestamp ? message : current);
+        if (oldest.createdTimestamp < cutoff) return false;
+        before = oldest.id;
+    }
+}
+
+function reminderEmbeds(lines: string[]) {
+    const descriptions: string[] = [];
+    for (const line of lines) {
+        const current = descriptions.at(-1);
+        if (!current || current.length + line.length + 1 > 3800) {
+            descriptions.push(line);
+        } else {
+            descriptions[descriptions.length - 1] += `\n${line}`;
+        }
+    }
+
+    return descriptions.slice(0, 10).map((description, index) =>
+        new EmbedBuilder()
+            .setTitle(index === 0 ? "📋 Stale Issue Reminder" : null)
+            .setDescription(description)
+            .setColor(Colors.Red));
+}
+
 // LOGIN
 client.once(Events.ClientReady, async (readyClient) => {
     await registerCommands();
 
     schedule.scheduleJob('* * * * *', async () => {
         for (const [issueId, {channel: channelId, lastStatus}] of Object.entries(await getActiveIssues())) {
-            if (!lastStatus) continue;
             const channel = await readyClient.channels.fetch(channelId);
             if (!channel?.isSendable()) return;
 
+            const state = await (await (await Linear()).issue(issueId)).state;
+            if (state && !channel.isDMBased()) {
+                await moveIssueChannelToStage(channel.guild, channel.id, state.name);
+            }
+
+            if (!lastStatus) continue;
             await channel.messages.edit(lastStatus, await getStatusMessage(issueId));
         }
     })
@@ -188,32 +223,34 @@ client.once(Events.ClientReady, async (readyClient) => {
         }
     });
     schedule.scheduleJob({hour: 19, minute: 0, second: 0, tz: "America/Los_Angeles"}, async () => {
+        const reminders = new Map<string, string[]>();
+        const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+
         for (const [issueId, {channel: channelId}] of Object.entries(await getActiveIssues())) {
             const channel = await readyClient.channels.fetch(channelId);
             if (!channel?.isSendable()) return;
 
             const issue = await (await Linear()).issue(issueId);
             const owners = await getOwners(issue, await issue.state);
+            if (!owners.length || await hasOwnerMessageSince(channel, owners, cutoff)) continue;
 
-            const messages = await channel.messages.fetch({limit: 100});
-            const startOfDayPST = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Los_Angeles'}));
-            startOfDayPST.setHours(0, 0, 0, 0);
+            for (const ownerId of owners) {
+                const ownerReminders = reminders.get(ownerId) ?? [];
+                ownerReminders.push(`• [[${issue.identifier}] ${issue.title}](${issue.url}) — <#${channel.id}>`);
+                reminders.set(ownerId, ownerReminders);
+            }
+        }
 
-            if (messages.some(msg => owners.includes(msg.author.id) &&
-                new Date(new Date(msg.createdTimestamp)
-                    .toLocaleString('en-US', {timeZone: 'America/Los_Angeles'})) >= startOfDayPST)) continue;
-
-            const ownerMentions = owners.map(user => `<@${user}>`).join(' ');
-            const embed = new EmbedBuilder()
-                .setTitle("📋 Daily Status Update Reminder")
-                .setDescription(`Please send a status update if nothing else has happened today.`)
-                .setColor(Colors.Red);
-
-            await channel.send({
-                content: ownerMentions,
-                embeds: [embed]
-            });
-
+        for (const [ownerId, issues] of reminders) {
+            try {
+                const user = await readyClient.users.fetch(ownerId);
+                await user.send({
+                    content: "These issues are waiting on you and have had no update from their current handlers in the last 48 hours:",
+                    embeds: reminderEmbeds(issues),
+                });
+            } catch (error) {
+                console.error(`Could not DM stale issue reminders to Discord user ${ownerId}:`, error);
+            }
         }
     })
 });

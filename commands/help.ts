@@ -25,7 +25,7 @@ export async function execute(interaction: CommandInteraction) {
                 },
                 {
                     name: "Automated reminders",
-                    value: "Issue channels receive a refreshed status message daily at 8 AM PT and a status update reminder at 7 PM PT if no update was posted that day.",
+                    value: "Issue channels receive a refreshed status message daily at 8 AM PT. At 9 PM PT, whoever is currently responsible for an issue (the users pinged in the channel for its stage) receives one DM listing every issue of theirs with no update in the last 48 hours.",
                 },
             )],
         flags: MessageFlags.Ephemeral,
