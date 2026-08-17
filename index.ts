@@ -236,7 +236,7 @@ client.once(Events.ClientReady, async (readyClient) => {
 
             for (const ownerId of owners) {
                 const ownerReminders = reminders.get(ownerId) ?? [];
-                ownerReminders.push(`• [[${issue.identifier}] ${issue.title}](${issue.url}) — <#${channel.id}>`);
+                ownerReminders.push(`* [[${issue.identifier}] ${issue.title}](${issue.url})\n  * <#${channel.id}>`);
                 reminders.set(ownerId, ownerReminders);
             }
         }
