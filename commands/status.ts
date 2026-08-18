@@ -85,7 +85,7 @@ async function sendTransition(
     const channel = interaction.channel;
     if (!channel?.isSendable()) return;
 
-    await moveIssueChannelToStage(interaction.guild, interaction.channelId, stage);
+    moveIssueChannelToStage(interaction.guild, interaction.channelId, stage);
     await interaction.reply({
         content: content,
         embeds: [new EmbedBuilder()
@@ -164,7 +164,7 @@ async function merged(interaction: StatusInteraction, issueId?: string) {
 
     if (!await requireStates(interaction, id, ['Done'])) return;
 
-    await moveIssueChannelToStage(interaction.guild, interaction.channelId, 'Done');
+    moveIssueChannelToStage(interaction.guild, interaction.channelId, 'Done');
     await removeIssue(id);
 
     await interaction.reply({

@@ -203,7 +203,7 @@ client.once(Events.ClientReady, async (readyClient) => {
 
             const state = await (await (await Linear()).issue(issueId)).state;
             if (state && !channel.isDMBased()) {
-                await moveIssueChannelToStage(channel.guild, channel.id, state.name);
+                moveIssueChannelToStage(channel.guild, channel.id, state.name);
             }
 
             if (!lastStatus) continue;
