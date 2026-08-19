@@ -77,7 +77,6 @@ export async function getActiveIssues() {
 }
 
 export async function getStageCategory(guild: Guild, state: string) {
-    await guild.channels.fetch();
     const existing = guild.channels.cache.find(channel =>
         channel.type === ChannelType.GuildCategory && channel.name === state);
     if (existing) return existing;
