@@ -209,7 +209,9 @@ client.once(Events.ClientReady, async (readyClient) => {
 
             const state = await (await (await Linear()).issue(issueId)).state;
             if (state && !channel.isDMBased()) {
-                moveIssueChannelToStage(channel.guild, channel.id, state.name);
+                let s = state.name;
+                if (s == "Done") s = "Merge Ready";
+                moveIssueChannelToStage(channel.guild, channel.id, s);
             }
 
             if (!lastStatus) continue;
