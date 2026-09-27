@@ -104,8 +104,8 @@ export async function registerCommands() {
         const {execute, autocomplete, modals, buttons} = await import(`./commands/${command.name}`);
         executes[command.name] = execute;
         if (autocomplete) autocompletes[command.name] = autocomplete;
-        if (modals) for (const regex of modals) { all_modals[regex] = modals[regex]; }
-        if (buttons) for (const regex of buttons) { all_buttons[regex] = buttons[regex]; }
+        if (modals) for (const regex in modals) { all_modals[regex] = modals[regex]; }
+        if (buttons) for (const regex in buttons) { all_buttons[regex] = buttons[regex]; }
     }
 
     client.on(Events.InteractionCreate, async (interaction) => {
