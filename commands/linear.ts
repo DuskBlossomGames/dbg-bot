@@ -21,7 +21,7 @@ export async function execute(interaction: CommandInteraction) {
             new ButtonBuilder()
                 .setLabel("Start OAuth Login")
                 .setStyle(ButtonStyle.Link)
-                .setURL(`https://linear.app/oauth/authorize?client_id=${process.env.LINEAR_CLIENT_ID}&redirect_uri=http://localhost&response_type=code&scope=read,write,issues:create,comments:create,timeSchedule:write,admin&prompt=consent&actor=app`),
+                .setURL(`https://linear.app/oauth/authorize?client_id=${process.env.LINEAR_CLIENT_ID}&redirect_uri=http://localhost&response_type=code&scope=read,write,issues:create,comments:create,timeSchedule:write&prompt=consent&actor=app`),
             new ButtonBuilder()
                 .setCustomId("linear_token_input_button")
                 .setLabel("Enter URL")
@@ -53,7 +53,7 @@ export const modals = {
     'linear_token_input_modal': async (interaction: ModalSubmitInteraction) => {
         const url = interaction.fields.getTextInputValue('linear_token')!;
 
-        const regex = /https:\/\/localhost.com\/oauth\/callback\?code=([0-9a-f]{40})/g
+        const regex = /https:\/\/localhost.com\/\?code=([0-9a-f]{40})/g
         if (!regex.test(url)) {
             await interaction.reply({
                 embeds: [new EmbedBuilder()
