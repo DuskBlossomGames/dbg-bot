@@ -1,10 +1,11 @@
 import {
+    AutocompleteInteraction, ButtonInteraction,
     Client, Collection,
-    Colors,
+    Colors, CommandInteraction,
     EmbedBuilder,
     Events,
     GatewayIntentBits, Message,
-    MessageFlags,
+    MessageFlags, ModalSubmitInteraction,
     PermissionFlagsBits,
     RepliableInteraction,
     REST,
@@ -94,64 +95,63 @@ export async function registerCommands() {
                     .setDescription('Move to Done and deregister watchers.')),
     ];
 
+    const executes: {[command: string]: (i: CommandInteraction) => Promise<void>} = {};
+    const autocompletes: {[command: string]: (i: AutocompleteInteraction) => Promise<void>} = {};
+    const all_modals: {[modal: string]: (i: ModalSubmitInteraction) => Promise<void>} = {};
+    const all_buttons: {[button: string]: (i: ButtonInteraction) => Promise<void>} = {};
+
     for (const command of commands) {
         const {execute, autocomplete, modals, buttons} = await import(`./commands/${command.name}`);
-        client.on(Events.InteractionCreate, async (interaction) => {
-            if (!interaction.isChatInputCommand() || interaction.commandName !== command.name) return;
+        executes[command.name] = execute;
+        if (autocomplete) autocompletes[command.name] = autocomplete;
+        if (modals) for (const regex of modals) { all_modals[regex] = modals[regex]; }
+        if (buttons) for (const regex of buttons) { all_buttons[regex] = buttons[regex]; }
+    }
+
+    client.on(Events.InteractionCreate, async (interaction) => {
+        if (interaction.isChatInputCommand()) {
+            if (!(interaction.commandName in executes)) return;
 
             try {
-                await execute(interaction);
+                await executes[interaction.commandName](interaction);
             } catch (error) {
                 console.error(error);
                 await sendError(interaction);
             }
-        });
-        if (autocomplete) {
-            client.on(Events.InteractionCreate, async (interaction) => {
-                if (!interaction.isAutocomplete() || interaction.commandName !== command.name) return;
+        } else if (interaction.isAutocomplete()) {
+            if (!(interaction.commandName in autocompletes)) return;
+
+            try {
+                await autocompletes[interaction.commandName](interaction);
+            } catch (error) {
+                console.error(error);
+            }
+        } else if (interaction.isModalSubmit()) {
+            for (const regex in all_modals) {
+                if (!new RegExp(regex).test(interaction.customId)) continue;
 
                 try {
-                    await autocomplete(interaction);
+                    await all_modals[regex](interaction);
                 } catch (error) {
                     console.error(error);
+                    await sendError(interaction);
                 }
-            })
-        }
-        if (modals) {
-            client.on(Events.InteractionCreate, async (interaction) => {
-                if (!interaction.isModalSubmit()) return;
+                break;
+            }
+        } else if (interaction.isButton()) {
+            for (const regex in all_buttons) {
+                if (!new RegExp(regex).test(interaction.customId)) continue;
 
-                for (const regex in modals) {
-                    if (!new RegExp(regex).test(interaction.customId)) continue;
-
-                    try {
-                        await modals[regex](interaction);
-                    } catch (error) {
-                        console.error(error);
-                        await sendError(interaction);
-                    }
-                    break;
+                try {
+                    await all_buttons[regex](interaction);
+                } catch (error) {
+                    console.error(error);
+                    await sendError(interaction);
                 }
-            })
+                break;
+            }
         }
-        if (buttons) {
-            client.on(Events.InteractionCreate, async (interaction) => {
-                if (!interaction.isButton()) return;
-
-                for (const regex in buttons) {
-                    if (!new RegExp(regex).test(interaction.customId)) continue;
-
-                    try {
-                        await buttons[regex](interaction);
-                    } catch (error) {
-                        console.error(error);
-                        await sendError(interaction);
-                    }
-                    break;
-                }
-            })
-        }
-    }
+    });
 
     try {
         await rest.put(Routes.applicationCommands(process.env.APP_ID!),
