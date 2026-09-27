@@ -200,6 +200,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     discordReady(readyClient);
 
     await registerCommands();
+    console.log("Registered commands");
 
     schedule.scheduleJob('* * * * *', async () => {
         for (const [issueId, {channel: channelId, lastStatus}] of Object.entries(await getActiveIssues())) {

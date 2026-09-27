@@ -60,7 +60,6 @@ async function refreshTokens() {
         const channel = discord!.channels.cache.find(channel =>
             channel.type === ChannelType.GuildText && channel.name === "bot-log")!;
         if (channel.isSendable()) await channel.send(error);
-        throw new Error(error);
     }
 
     const data = await response.json();
