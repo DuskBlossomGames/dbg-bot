@@ -53,12 +53,12 @@ export const modals = {
     'linear_token_input_modal': async (interaction: ModalSubmitInteraction) => {
         const url = interaction.fields.getTextInputValue('linear_token')!;
 
-        const regex = /http:\/\/localhost\.com\/\?code=([0-9a-f]{40})/g
+        const regex = /http:\/\/localhost\/\?code=([0-9a-f]{64})/
         if (!regex.test(url)) {
             await interaction.reply({
                 embeds: [new EmbedBuilder()
                     .setTitle("Invalid URL")
-                    .setDescription("Redirect URL must be of the form 'http://localhost.com/?code=<code>'")
+                    .setDescription("Redirect URL must be of the form 'http://localhost/?code=<code>'")
                     .setColor(Colors.DarkRed)],
                 flags: MessageFlags.Ephemeral
             });
