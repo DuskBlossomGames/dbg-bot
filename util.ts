@@ -25,7 +25,7 @@ if (!existsSync(ISSUE_MAP_FILE)) writeFileSync(ISSUE_MAP_FILE, '{}')
 
 export async function registerUser(discord: Snowflake, linear: string, roles: ProjectRoles[]) {
     const map = JSON.parse(await readFile(USER_MAP_FILE, 'utf-8')) as UserMap;
-    map[discord] = {linear, roles: roles.map(r=>ProjectRoles[r])};
+    map[discord] = {linear, roles: roles};
     await writeFile(USER_MAP_FILE, JSON.stringify(map));
 }
 
@@ -35,7 +35,7 @@ export async function getLinearUser(discord: Snowflake) {
 
 export async function getDiscordUser(linear: string) {
     const map = JSON.parse(await readFile(USER_MAP_FILE, 'utf-8')) as UserMap;
-    return Object.keys(map).find(key=>map[key].linear === linear);
+    return Object.keys(map).find(key=>map[key].linear === linear)!;
 }
 
 export async function getUsers(role: ProjectRoles) {
@@ -152,7 +152,7 @@ export async function getOwners(issue: Issue, state: WorkflowState) {
     } else if (stateId === LinearStates['QA Ready']) {
         owners = await getUsers(ProjectRoles.QAReviewer);
     } else {
-        owners = [await getDiscordUser((await issue.assignee).id)];
+        owners = [await getDiscordUser((await issue.assignee)!.id)];
     }
 
     return [...new Set(owners)];
@@ -160,7 +160,7 @@ export async function getOwners(issue: Issue, state: WorkflowState) {
 
 export async function getStatusMessage(issueId: string, assigneeId?: string) {
     const issue = await (await Linear()).issue(issueId);
-    const state = await issue.state;
+    const state = (await issue.state)!;
     const stateName = state?.name || 'Unknown';
 
     const githubUrl = `https://github.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/tree/${branchName(issue)}`;
@@ -175,7 +175,7 @@ export async function getStatusMessage(issueId: string, assigneeId?: string) {
         .addFields(
             {name: 'Status', value: `${getClosestCircleEmoji(state?.color || '#5E6AD2')} ${stateName}`, inline: true},
             {name: 'Due Date', value: issue.dueDate || 'Not set', inline: true},
-            {name: 'Owner', value: `<@${await getDiscordUser(assigneeId ?? (await issue.assignee).id)}>`, inline: true},
+            {name: 'Owner', value: `<@${await getDiscordUser(assigneeId ?? (await issue.assignee)!.id)}>`, inline: true},
             {name: 'Handler', value: owners.map(user => `<@${user}>`).join(' '), inline: true}
         );
 

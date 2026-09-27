@@ -3,22 +3,47 @@ import {Octokit} from "octokit";
 import { createAppAuth } from "@octokit/auth-app"
 import {readFile, writeFile} from "node:fs/promises";
 import {existsSync, writeFileSync, readFileSync} from "node:fs";
+import {ChannelType, Client, GuildBasedChannel} from "discord.js";
 
 interface TokenStorage {
     refreshToken: string;
     expiresAt: number;
 }
-const DEFAULT_TOKENS: TokenStorage = { refreshToken: process.env.LINEAR_REFRESH_TOKEN!, expiresAt: 0 };
+// const DEFAULT_TOKENS: TokenStorage = { refreshToken: process.env.LINEAR_REFRESH_TOKEN!, expiresAt: 0 };
 
 const LINEAR_TOKENS_FILE = "linear_tokens.json";
-if (!existsSync(LINEAR_TOKENS_FILE)) writeFileSync(LINEAR_TOKENS_FILE, JSON.stringify(DEFAULT_TOKENS));
+if (!existsSync(LINEAR_TOKENS_FILE)) writeFileSync(LINEAR_TOKENS_FILE, '{}');
 
 const tokens = async () =>
     JSON.parse(await readFile(LINEAR_TOKENS_FILE, 'utf-8')) as TokenStorage;
 const writeTokens = async (tokens: TokenStorage) =>
     await writeFile(LINEAR_TOKENS_FILE, JSON.stringify(tokens));
 
-async function refreshTokens(defaulted: boolean = false) {
+export async function linearOauth(token: string) {
+    const payload = new URLSearchParams();
+    payload.append('code', token);
+    payload.append('redirect_uri', 'http://localhost');
+    payload.append('client_id', process.env.LINEAR_CLIENT_ID!);
+    payload.append('client_secret', process.env.LINEAR_CLIENT_SECRET!);
+    payload.append('grant_type', 'authorization_code');
+
+    const resp = await (await fetch('https://api.linear.app/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: payload
+    })).json();
+
+    await writeTokens({
+        refreshToken: resp.refresh_token,
+        expiresAt: Date.now() + resp.expires_in * 1000,
+    });
+
+    client = new LinearClient({
+        accessToken: resp.access_token,
+    });
+}
+
+async function refreshTokens() {
     const response = await fetch("https://api.linear.app/oauth/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -31,11 +56,11 @@ async function refreshTokens(defaulted: boolean = false) {
     });
 
     if (!response.ok) {
-        if (!defaulted) {
-            await writeTokens(DEFAULT_TOKENS);
-            return refreshTokens(true);
-        }
-        throw new Error(`Failed to refresh Linear token: ${response.statusText}`);
+        const error = `<@501212640392118272> failed to refresh Linear token: ${response.statusText}`;
+        const channel = discord!.channels.cache.find(channel =>
+            channel.type === ChannelType.GuildCategory && channel.name === "bot-log")!;
+        if (channel.isSendable()) await channel.send(error);
+        throw new Error(error);
     }
 
     const data = await response.json();
@@ -50,11 +75,14 @@ async function refreshTokens(defaulted: boolean = false) {
     });
 }
 
+let discord: Client<true> | null = null
+export function discordReady(d: Client<true>) { discord = d; }
+
 let client: LinearClient | null = null;
 export async function Linear(): Promise<LinearClient> {
     const buffer = 5 * 60 * 1000;
     if (Date.now() + buffer >= (await tokens()).expiresAt || !client) await refreshTokens();
-    return client;
+    return client!;
 }
 export const LinearStates = {
     'Code Review': 'f8cafa5c-7680-4aeb-8f5d-5b1d1191403f',

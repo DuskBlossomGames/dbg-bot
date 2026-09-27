@@ -1,9 +1,9 @@
 import {
-    Client,
+    Client, Collection,
     Colors,
     EmbedBuilder,
     Events,
-    GatewayIntentBits,
+    GatewayIntentBits, Message,
     MessageFlags,
     PermissionFlagsBits,
     RepliableInteraction,
@@ -19,10 +19,10 @@ import {
     moveIssueChannelToStage,
     updateStatusMessage
 } from "./util";
-import {Linear, LinearStates} from "./clients";
+import {discordReady, Linear, LinearStates} from "./clients";
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
-const rest = new REST().setToken(process.env.DISCORD_TOKEN);
+const rest = new REST().setToken(process.env.DISCORD_TOKEN!);
 
 // REGISTER COMMANDS
 async function sendError(interaction: RepliableInteraction) {
@@ -151,7 +151,7 @@ export async function registerCommands() {
     }
 
     try {
-        await rest.put(Routes.applicationCommands(process.env.APP_ID),
+        await rest.put(Routes.applicationCommands(process.env.APP_ID!),
             {body: commands.map(command => command.toJSON())});
     } catch (error) {
         console.error(error);
@@ -162,7 +162,7 @@ export async function registerCommands() {
 async function hasOwnerMessageSince(channel: SendableChannels, ownerIds: string[], cutoff: number) {
     let before = undefined;
     while (true) {
-        const messages = await channel.messages.fetch({limit: 100, before});
+        const messages: Collection<string, Message<boolean>> = await channel.messages.fetch({limit: 100, before});
         if (messages.some(message =>
             ownerIds.includes(message.author.id) && message.createdTimestamp >= cutoff)) return true;
 
@@ -194,6 +194,8 @@ function reminderEmbeds(lines: string[]) {
 
 // LOGIN
 client.once(Events.ClientReady, async (readyClient) => {
+    discordReady(readyClient);
+
     await registerCommands();
 
     schedule.scheduleJob('* * * * *', async () => {
@@ -231,7 +233,7 @@ client.once(Events.ClientReady, async (readyClient) => {
             if (!channel?.isSendable()) return;
 
             const issue = await (await Linear()).issue(issueId);
-            const owners = await getOwners(issue, await issue.state);
+            const owners = await getOwners(issue, (await issue.state)!);
             if (!owners.length || await hasOwnerMessageSince(channel, owners, cutoff)) continue;
 
             for (const ownerId of owners) {

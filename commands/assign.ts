@@ -23,9 +23,9 @@ import {Issue, IssueConnection} from "@linear/sdk";
 export async function allIssues() {
     let issues: Issue[] = [];
 
-    let res: IssueConnection;
+    let res: IssueConnection|undefined = undefined;
     do {
-        res = await (res?.fetchNext() ?? (await Linear()).issues());
+        res = await ((res as IssueConnection)?.fetchNext() ?? (await Linear()).issues());
         issues.push(...res.nodes);
     } while (res.pageInfo.hasNextPage)
 
@@ -83,7 +83,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
         return;
     }
 
-    let issue: Issue;
+    let issue: Issue|undefined = undefined;
     try { issue = await (await Linear()).issue(issueId); } catch (error) {}
     if (!issue) {
         await interaction.reply({

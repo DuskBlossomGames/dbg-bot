@@ -43,13 +43,13 @@ export async function execute(interaction: CommandInteraction) {
                         .setMaxValues(Object.values(ProjectRoles).length)
                         .setOptions(Object.keys(ProjectRoles).map(e=>
                             new StringSelectMenuOptionBuilder()
-                                .setLabel(ProjectRoles[e])
+                                .setLabel(e)
                                 .setValue(e))))));
 }
 
 export const modals = {
     'link_user_modal': async (interaction: ModalSubmitInteraction) => {
-        const discord = interaction.fields.getSelectedUsers('discord_user').keyAt(0);
+        const discord = interaction.fields.getSelectedUsers('discord_user')!.keyAt(0)!;
         const linear = interaction.fields.getStringSelectValues('linear_user')[0];
         const roles = interaction.fields.getStringSelectValues('roles').map(s=>s as ProjectRoles);
 

@@ -40,7 +40,7 @@ async function requireIssueChannel(interaction: StatusInteraction, issueId?: str
 }
 
 async function requireStates(interaction: StatusInteraction, issue: string, states: (keyof typeof LinearStates)[]) {
-    const state = await (await (await Linear()).issue(issue)).state;
+    const state = (await (await (await Linear()).issue(issue)).state)!;
     if (!states.map(s=>LinearStates[s]).includes(state.id)) {
         await interaction.reply({
             embeds: [new EmbedBuilder()
@@ -59,7 +59,7 @@ async function requireStates(interaction: StatusInteraction, issue: string, stat
 async function updateState(interaction: StatusInteraction, issueId: string, stage: keyof typeof LinearStates) {
     let update;
     try { update = await (await Linear()).updateIssue(issueId, {stateId: LinearStates[stage]}); } catch (e) { console.log(e); }
-    if (!update.success) {
+    if (!update?.success) {
         await interaction.reply({
             embeds: [new EmbedBuilder()
                 .setTitle("🚨 Linear Update Failed")
@@ -85,16 +85,16 @@ async function sendTransition(
     const channel = interaction.channel;
     if (!channel?.isSendable()) return;
 
-    moveIssueChannelToStage(interaction.guild, interaction.channelId, stage);
+    moveIssueChannelToStage(interaction.guild!, interaction.channelId, titleStage ?? stage);
     await interaction.reply({
         content: content,
         embeds: [new EmbedBuilder()
             .setTitle(`Moved to ${titleStage ?? stage}`)
             .setDescription(description ?? null)
-            .setFooter({text: `Initiated by ${(interaction.member as GuildMember).displayName}`, iconURL: interaction.user.avatarURL()})
+            .setFooter({text: `Initiated by ${(interaction.member as GuildMember).displayName}`, iconURL: interaction.user.avatarURL() ?? undefined})
             .setColor(Colors.Green)]});
 
-    await channel.messages.edit(await getLastStatusMessage(issueId), await getStatusMessage(issueId));
+    await channel.messages.edit((await getLastStatusMessage(issueId))!, await getStatusMessage(issueId));
 }
 
 function mention(ids: (string | undefined)[]) {
@@ -164,7 +164,7 @@ async function merged(interaction: StatusInteraction, issueId?: string) {
 
     if (!await requireStates(interaction, id, ['Done'])) return;
 
-    moveIssueChannelToStage(interaction.guild, interaction.channelId, 'Done');
+    moveIssueChannelToStage(interaction.guild!, interaction.channelId, 'Done');
     await removeIssue(id);
 
     await interaction.reply({
@@ -174,7 +174,7 @@ async function merged(interaction: StatusInteraction, issueId?: string) {
             .setColor(Colors.Green)]});
 }
 
-const subcommands = {
+const subcommands: {[key: string]: (interaction: StatusInteraction) => Promise<void>} = {
     'continue-dev': continueDev,
     'code-review': codeReview,
     'qa-review': qaReview,

@@ -96,7 +96,7 @@ export const modals = {
 
         const creator = await (await Linear()).user(await getLinearUser(interaction.user.id));
         const issue = await (await Linear()).createIssue({
-            teamId: process.env.LINEAR_TEAM,
+            teamId: process.env.LINEAR_TEAM!,
             createAsUser: creator.name,
             projectId,
             labelIds,
@@ -113,7 +113,7 @@ export const modals = {
                     .setURL(issueData.url)
                     .setDescription(description)
                     .setColor(Colors.Green)
-                    .setFooter({text: `Labels: ${labels.nodes.map(l=>l.name).join(' ⋅ ')}\nCreated by ${creator.name}`, iconURL: creator.avatarUrl})],
+                    .setFooter({text: `Labels: ${labels.nodes.map(l=>l.name).join(' ⋅ ')}\nCreated by ${creator.name}`, iconURL: creator.avatarUrl ?? undefined})],
                 components: [new ActionRowBuilder<ButtonBuilder>()
                     .addComponents(
                         new ButtonBuilder()
