@@ -58,7 +58,7 @@ async function refreshTokens() {
     if (!response.ok) {
         const error = `<@501212640392118272> failed to refresh Linear token: ${response.statusText}`;
         const channel = discord!.channels.cache.find(channel =>
-            channel.type === ChannelType.GuildCategory && channel.name === "bot-log")!;
+            channel.type === ChannelType.GuildText && channel.name === "bot-log")!;
         if (channel.isSendable()) await channel.send(error);
         throw new Error(error);
     }
