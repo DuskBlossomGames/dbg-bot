@@ -52,6 +52,9 @@ export async function registerCommands() {
             .setName("issue")
             .setDescription("Creates a Linear issue."),
         new SlashCommandBuilder()
+            .setName("linear")
+            .setDescription("Complete Linear OAuth."),
+        new SlashCommandBuilder()
             .setName('link')
             .setDescription("Link a Discord user to a Linear user and apply roles.")
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
