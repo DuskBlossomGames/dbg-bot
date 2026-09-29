@@ -135,7 +135,34 @@ export function getClosestCircleEmoji(inputHex: number|string) {
     return closestMatch.emoji;
 }
 
-export function branchName(issue: Issue) {
+// Fetch everything the bot needs about an issue in one request, rather than the SDK's lazy
+// per-relation requests (issue.state, issue.assignee, ...) which each count against the rate limit.
+export type IssueSnapshot = Pick<Issue, 'id' | 'identifier' | 'title' | 'description' | 'url' | 'dueDate'>
+    & {state?: Pick<WorkflowState, 'id' | 'name' | 'color'> | null, assignee?: {id: string} | null};
+const ISSUE_FIELDS = `id identifier title description url dueDate state { id name color } assignee { id }`;
+
+export async function fetchIssue(issueId: string) {
+    return (await (await Linear()).client.request<{issue: IssueSnapshot}, {id: string}>(
+        `query Issue($id: String!) { issue(id: $id) { ${ISSUE_FIELDS} } }`, {id: issueId})).issue;
+}
+
+export async function fetchIssues(issueIds: string[]) {
+    const result = new Map<string, IssueSnapshot>();
+    let after: string | undefined = undefined;
+    do {
+        const {issues}: {issues: {nodes: IssueSnapshot[], pageInfo: {hasNextPage: boolean, endCursor?: string}}} =
+            await (await Linear()).client.request(`query Issues($ids: [ID!], $after: String) {
+                issues(filter: {id: {in: $ids}}, first: 250, after: $after, includeArchived: true) {
+                    nodes { ${ISSUE_FIELDS} } pageInfo { hasNextPage endCursor }
+                }
+            }`, {ids: issueIds, after});
+        for (const issue of issues.nodes) result.set(issue.id, issue);
+        after = issues.pageInfo.hasNextPage ? issues.pageInfo.endCursor : undefined;
+    } while (after)
+    return result;
+}
+
+export function branchName(issue: Pick<Issue, 'identifier' | 'title'>) {
     const slug = issue.title.toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '')
@@ -143,7 +170,7 @@ export function branchName(issue: Issue) {
     return `${issue.identifier}-${slug}`;
 }
 
-export async function getOwners(issue: Issue, state: WorkflowState) {
+export async function getOwners(issue: IssueSnapshot, state?: IssueSnapshot['state']) {
     let owners: string[];
 
     const stateId = state?.id;
@@ -158,8 +185,9 @@ export async function getOwners(issue: Issue, state: WorkflowState) {
     return [...new Set(owners)];
 }
 
-export async function getStatusMessage(issueId: string, assigneeId?: string) {
-    const issue = await (await Linear()).issue(issueId);
+export async function getStatusMessage(issueOrId: string | IssueSnapshot, assigneeId?: string) {
+    const issue = typeof issueOrId === 'string' ? await fetchIssue(issueOrId) : issueOrId;
+    const issueId = issue.id;
     const state = (await issue.state)!;
     const stateName = state?.name || 'Unknown';
 

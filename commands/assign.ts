@@ -18,27 +18,26 @@ import {
     registerChannel,
     updateStatusMessage
 } from "../util";
-import {Issue, IssueConnection} from "@linear/sdk";
+import {Issue, LinearDocument} from "@linear/sdk";
 
-export async function allIssues() {
-    let issues: Issue[] = [];
-
-    let res: IssueConnection|undefined = undefined;
-    do {
-        res = await ((res as IssueConnection)?.fetchNext() ?? (await Linear()).issues());
-        issues.push(...res.nodes);
-    } while (res.pageInfo.hasNextPage)
-
-    return issues;
+// Identifiers (e.g. ENG-123) aren't filterable directly, so match on the team key and issue number instead.
+function identifierFilter(query: string): LinearDocument.IssueFilter[] {
+    const [, key, number] = query.match(/^([a-z][a-z0-9]*)?-?(\d+)?$/i) ?? [];
+    if (!key && !number) return [];
+    return [{
+        ...(key && {team: {key: number ? {eqIgnoreCase: key} : {startsWithIgnoreCase: key}}}),
+        ...(number && {number: {eq: Number(number)}}),
+    }];
 }
 
 export async function autocomplete(interaction: AutocompleteInteraction) {
-    const focused = interaction.options.getFocused().toLowerCase();
-    const results = (await allIssues()).filter(n=>
-        n.title.toLowerCase().includes(focused) || n.identifier.toLowerCase().includes(focused))
-        .sort();
+    const focused = interaction.options.getFocused().trim();
+    const results = await (await Linear()).issues({
+        first: 25,
+        filter: focused ? {or: [{title: {containsIgnoreCase: focused}}, ...identifierFilter(focused)]} : undefined,
+    });
     await interaction.respond(
-        results.slice(0, 25).map(issue => ({
+        results.nodes.map(issue => ({
             name: `${issue.identifier} — ${issue.title}`.slice(0, 100),
             value: issue.id,
         })),

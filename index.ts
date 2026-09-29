@@ -14,6 +14,8 @@ import {
 } from 'discord.js';
 import * as schedule from 'node-schedule';
 import {
+    fetchIssue,
+    fetchIssues,
     getActiveIssues,
     getOwners,
     getStatusMessage,
@@ -202,12 +204,14 @@ client.once(Events.ClientReady, async (readyClient) => {
     await registerCommands();
     console.log("Registered commands");
 
+    const renderedStatus = new Map<string, string>();
     schedule.scheduleJob('* * * * *', async () => {
+        const issues = await fetchIssues(Object.keys(await getActiveIssues()));
         for (const [issueId, {channel: channelId, lastStatus}] of Object.entries(await getActiveIssues())) {
-            const channel = await readyClient.channels.fetch(channelId);
-            if (!channel?.isSendable()) return;
+            const channel = await readyClient.channels.fetch(channelId).catch(() => null);
+            if (!channel?.isSendable()) continue;
 
-            const state = await (await (await Linear()).issue(issueId)).state;
+            const state = issues.get(issueId)?.state;
             if (state && !channel.isDMBased()) {
                 let s = state.name;
                 if (s == "Done") s = "Merge Ready";
@@ -215,30 +219,35 @@ client.once(Events.ClientReady, async (readyClient) => {
             }
 
             if (!lastStatus) continue;
-            await channel.messages.edit(lastStatus, await getStatusMessage(issueId));
+            const status = await getStatusMessage(issues.get(issueId) ?? issueId);
+            if (renderedStatus.get(lastStatus) === JSON.stringify(status)) continue;
+            await channel.messages.edit(lastStatus, status);
+            renderedStatus.set(lastStatus, JSON.stringify(status));
         }
     })
 
     schedule.scheduleJob({hour: 8, minute: 0, second: 0, tz: "America/Los_Angeles"}, async () => {
+        const issues = await fetchIssues(Object.keys(await getActiveIssues()));
         for (const [issueId, {channel: channelId, lastStatus}] of Object.entries(await getActiveIssues())) {
-            const channel = await readyClient.channels.fetch(channelId);
-            if (!channel?.isSendable()) return;
+            const channel = await readyClient.channels.fetch(channelId).catch(() => null);
+            if (!channel?.isSendable()) continue;
 
             const messages = await channel.messages.fetch({limit: 20});
             if (messages.some(msg=>msg.id === lastStatus)) continue;
 
-            await updateStatusMessage(issueId, (await channel.send(await getStatusMessage(issueId))).id);
+            await updateStatusMessage(issueId, (await channel.send(await getStatusMessage(issues.get(issueId) ?? issueId))).id);
         }
     });
     schedule.scheduleJob({hour: 19, minute: 0, second: 0, tz: "America/Los_Angeles"}, async () => {
         const reminders = new Map<string, string[]>();
         const cutoff = Date.now() - 48 * 60 * 60 * 1000;
 
+        const issues = await fetchIssues(Object.keys(await getActiveIssues()));
         for (const [issueId, {channel: channelId}] of Object.entries(await getActiveIssues())) {
-            const channel = await readyClient.channels.fetch(channelId);
-            if (!channel?.isSendable()) return;
+            const channel = await readyClient.channels.fetch(channelId).catch(() => null);
+            if (!channel?.isSendable()) continue;
 
-            const issue = await (await Linear()).issue(issueId);
+            const issue = issues.get(issueId) ?? await fetchIssue(issueId);
             const owners = await getOwners(issue, (await issue.state)!);
             if (!owners.length || await hasOwnerMessageSince(channel, owners, cutoff)) continue;
 

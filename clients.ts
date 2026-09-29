@@ -1,9 +1,10 @@
-import {LinearClient} from "@linear/sdk";
+import {LinearClient, LinearErrorRaw, LinearGraphQLClient, parseLinearError, RatelimitedLinearError} from "@linear/sdk";
 import {Octokit} from "octokit";
 import { createAppAuth } from "@octokit/auth-app"
 import {readFile, writeFile} from "node:fs/promises";
 import {existsSync, writeFileSync, readFileSync} from "node:fs";
 import {ChannelType, Client, GuildBasedChannel} from "discord.js";
+import * as schedule from 'node-schedule';
 
 interface TokenStorage {
     refreshToken: string;
@@ -56,10 +57,7 @@ async function refreshTokens() {
     });
 
     if (!response.ok) {
-        const error = `<@501212640392118272> failed to refresh Linear token: ${response.statusText}`;
-        const channel = discord!.channels.cache.find(channel =>
-            channel.type === ChannelType.GuildText && channel.name === "bot-log")!;
-        if (channel.isSendable()) await channel.send(error);
+        await botLog(`<@501212640392118272> failed to refresh Linear token: ${response.statusText}`);
     }
 
     const data = await response.json();
@@ -76,6 +74,57 @@ async function refreshTokens() {
 
 let discord: Client<true> | null = null
 export function discordReady(d: Client<true>) { discord = d; }
+
+async function botLog(message: string) {
+    const channel = discord!.channels.cache.find(channel =>
+        channel.type === ChannelType.GuildText && channel.name === "bot-log")!;
+    if (channel.isSendable()) await channel.send(message);
+}
+
+// On a rate limit, log out of Discord and wait out Linear's window before exiting, so the container restarts once
+// the limit has cleared instead of crash-looping (and burning Discord logins) while Linear is still rejecting requests.
+let rateLimitError: RatelimitedLinearError | null = null;
+async function handleRateLimit(error: RatelimitedLinearError) {
+    if (rateLimitError) return;
+    rateLimitError = error;
+
+    const now = Date.now(), hour = 60 * 60 * 1000;
+    const exhausted = [
+        error.requestsRemaining === 0 ? error.requestsResetAt : undefined,
+        error.complexityRemaining === 0 ? error.complexityResetAt : undefined,
+    ].filter((reset): reset is number => !!reset && reset > now);
+    const resetAt = exhausted.length ? Math.max(...exhausted)
+        : error.retryAfter ? now + error.retryAfter * 1000
+        : error.requestsResetAt && error.requestsResetAt > now ? error.requestsResetAt
+        : now + hour;
+    const wait = Math.min(resetAt - now, hour) + 30 * 1000;
+
+    console.error(`Linear rate limited, restarting in ${Math.round(wait / 1000)}s`, error);
+    await botLog(`<@501212640392118272> Linear rate limit hit ` +
+        `(requests: ${error.requestsRemaining ?? '?'}/${error.requestsLimit ?? '?'} remaining, ` +
+        `complexity: ${error.complexityRemaining ?? '?'}/${error.complexityLimit ?? '?'} remaining). ` +
+        `Shutting down and restarting <t:${Math.floor((now + wait) / 1000)}:R>.`).catch(console.error);
+
+    // In-flight handlers may fail once Discord is gone; don't let that end the wait early.
+    process.on('unhandledRejection', error => console.error(error));
+    process.on('uncaughtException', error => console.error(error));
+    setTimeout(() => process.exit(1), wait);
+
+    for (const job of Object.values(schedule.scheduledJobs)) job.cancel();
+    await discord?.destroy().catch(console.error);
+}
+
+const request = LinearGraphQLClient.prototype.request;
+LinearGraphQLClient.prototype.request = async function (this: LinearGraphQLClient, ...args: Parameters<typeof request>) {
+    if (rateLimitError) throw rateLimitError;
+    try {
+        return await request.apply(this, args);
+    } catch (error) {
+        const parsed = parseLinearError(error as LinearErrorRaw);
+        if (parsed instanceof RatelimitedLinearError) await handleRateLimit(parsed);
+        throw error;
+    }
+} as typeof request;
 
 let client: LinearClient | null = null;
 export async function Linear(): Promise<LinearClient> {
