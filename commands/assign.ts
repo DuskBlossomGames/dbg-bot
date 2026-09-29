@@ -37,7 +37,8 @@ function identifierFilter(query: string): LinearDocument.IssueFilter {
             numbers.push({or: [{number: {gte: num}}, {number: {lt: num + oom}}]})
         }
     }
-    console.log(query, numbers);
+    console.log(query);
+    console.dir(numbers, { depth: null, colors: true });
 
     return {and: [
         key ? {team: {key: number ? {eqIgnoreCase: key} : {startsWithIgnoreCase: key}}} : {},
