@@ -34,11 +34,9 @@ function identifierFilter(query: string): LinearDocument.IssueFilter {
         for (let i = number.length+1; i <= MAX_DIGITS; i++) {
             oom *= 10;
             num *= 10;
-            numbers.push({or: [{number: {gte: num}}, {number: {lt: num + oom}}]})
+            numbers.push({and: [{number: {gte: num}}, {number: {lt: num + oom}}]})
         }
     }
-    console.log(query);
-    console.dir(numbers, { depth: null, colors: true });
 
     return {and: [
         key ? {team: {key: number ? {eqIgnoreCase: key} : {startsWithIgnoreCase: key}}} : {},
