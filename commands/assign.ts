@@ -21,24 +21,38 @@ import {
 import {Issue, LinearDocument} from "@linear/sdk";
 
 // Identifiers (e.g. ENG-123) aren't filterable directly, so match on the team key and issue number instead.
-function identifierFilter(query: string): LinearDocument.IssueFilter[] {
+function identifierFilter(query: string): LinearDocument.IssueFilter {
     const [, key, number] = query.match(/^([a-z][a-z0-9]*)?-?(\d+)?$/i) ?? [];
-    if (!key && !number) return [];
-    return [{
-        ...(key && {team: {key: number ? {eqIgnoreCase: key} : {startsWithIgnoreCase: key}}}),
-        ...(number && {number: {eq: Number(number)}}),
-    }];
+    if (!key && !number) return {};
+
+    const MAX_DIGITS = 4;
+    const numbers: LinearDocument.IssueFilter[] = []
+    if (number) {
+        let num = Number(number);
+        numbers.push({number: {eq: num}});
+        let oom = 10**(number.length-1);
+        for (let i = number.length+1; i <= MAX_DIGITS; i++) {
+            oom *= 10;
+            num *= 10;
+            numbers.push({or: [{number: {gte: num}}, {number: {lt: num + oom}}]})
+        }
+    }
+
+    return {and: [
+        key ? {team: {key: number ? {eqIgnoreCase: key} : {startsWithIgnoreCase: key}}} : {},
+        number ? {or: numbers} : {},
+    ]};
 }
 
 export async function autocomplete(interaction: AutocompleteInteraction) {
     const focused = interaction.options.getFocused().trim();
     const results = await (await Linear()).issues({
         first: 25,
-        filter: focused ? {or: [{title: {containsIgnoreCase: focused}}, ...identifierFilter(focused)]} : undefined,
+        filter: focused ? {and: [{title: {containsIgnoreCase: focused}}, identifierFilter(focused)]} : undefined,
     });
     await interaction.respond(
         results.nodes.map(issue => ({
-            name: `${issue.identifier} — ${issue.title}`.slice(0, 100),
+            name: `${issue.identifier} — ${issue.title}`.slice(0, 25),
             value: issue.id,
         })),
     );
