@@ -48,7 +48,7 @@ export async function autocomplete(interaction: AutocompleteInteraction) {
     const focused = interaction.options.getFocused().trim();
     const results = await (await Linear()).issues({
         first: 25,
-        filter: focused ? {and: [{title: {containsIgnoreCase: focused}}, identifierFilter(focused)]} : undefined,
+        filter: focused ? {or: [{title: {containsIgnoreCase: focused}}, identifierFilter(focused)]} : undefined,
     });
     await interaction.respond(
         results.nodes.map(issue => ({
